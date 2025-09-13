@@ -1,2 +1,4 @@
 bybit
-pybit
+pybit==5.6.2
+requests==2.31.0
+urllib3==1.26.16
