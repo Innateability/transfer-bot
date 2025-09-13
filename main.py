@@ -35,7 +35,7 @@ def load_siphon_level():
         with open(state_file, "r") as f:
             return float(f.read().strip())
     except:
-        return START siphon_level
+        return siphon_level
 
 def save_siphon_level(level):
     with open(state_file, "w") as f:
