@@ -1,41 +1,37 @@
-#!/usr/bin/env python3
-import os
-import uuid
 import logging
+import time
 from pybit.unified_trading import HTTP
 
-# ====== CONFIG ======
-API_KEY = os.getenv("BYBIT_API_KEY")      # or hardcode your API key here
-API_SECRET = os.getenv("BYBIT_API_SECRET")  # or hardcode your API secret here
-
-# Logging setup
+# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s"
 )
-logger = logging.getLogger("BybitTransfer")
 
-# Initialize session
+API_KEY = "YOUR_API_KEY"
+API_SECRET = "YOUR_API_SECRET"
+
 session = HTTP(
-    testnet=False,  # True for testnet, False for live
+    testnet=False,  # True for testnet
     api_key=API_KEY,
-    api_secret=API_SECRET,
+    api_secret=API_SECRET
 )
 
-def transfer_usdt(amount=0.1):
-    transfer_id = f"transfer_{uuid.uuid4().hex[:8]}"
+def transfer_usdt():
+    transfer_id = f"tr_{int(time.time() * 1000)}"
+    logging.info("Generated transferId (CID) = %s", transfer_id)
     try:
-        resp = session.asset_transfer(
+        resp = session.create_internal_transfer(
             transferId=transfer_id,
             coin="USDT",
-            amount=str(amount),
-            from_account_type="UNIFIED",   # Futures/Unified Trading Account
-            to_account_type="FUND"         # Funding Wallet
+            amount="0.1",
+            fromAccountType="UNIFIED",
+            toAccountType="FUND"
         )
-        logger.info("Transfer request sent: %s", transfer_id)
-        logger.info("Response: %s", resp)
+        logging.info("Transfer response: %s", resp)
     except Exception as e:
-        logger.exception("Error during transfer")
+        logging.error("Error during transfer")
+        logging.exception(e)
 
 if __name__ == "__main__":
-    transfer_usdt(0.1)
+    transfer_usdt()
