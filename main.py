@@ -1,6 +1,7 @@
 import logging
 import time
 import os
+import uuid
 from pybit.unified_trading import HTTP
 
 # Configure logging
@@ -23,8 +24,9 @@ session = HTTP(
 )
 
 def transfer_usdt():
-    transfer_id = f"tr_{int(time.time() * 1000)}"
-    logging.info("Generated transferId (CID) = %s", transfer_id)
+    # Generate a proper UUID
+    transfer_id = str(uuid.uuid4())
+    logging.info("Generated transferId (UUID) = %s", transfer_id)
     try:
         resp = session.create_internal_transfer(
             transferId=transfer_id,
