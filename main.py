@@ -1,5 +1,6 @@
 import logging
 import time
+import os
 from pybit.unified_trading import HTTP
 
 # Configure logging
@@ -8,8 +9,12 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s"
 )
 
-API_KEY = "YOUR_API_KEY"
-API_SECRET = "YOUR_API_SECRET"
+# Load API credentials from environment
+API_KEY = os.getenv("BYBIT_API_KEY")
+API_SECRET = os.getenv("BYBIT_API_SECRET")
+
+if not API_KEY or not API_SECRET:
+    raise ValueError("API key and secret must be set in environment variables!")
 
 session = HTTP(
     testnet=False,  # True for testnet
