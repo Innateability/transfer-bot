@@ -30,7 +30,7 @@ state_file = "siphon_state.txt"
 
 def load_siphon_level():
     if not os.path.exists(state_file):
-        return START siphon_level
+        return siphon_level
     try:
         with open(state_file, "r") as f:
             return float(f.read().strip())
