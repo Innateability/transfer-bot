@@ -20,7 +20,7 @@ API_SECRET = os.environ.get("BYBIT_API_SECRET", "")
 ACCOUNT_TYPE = "UNIFIED"
 SYMBOL = "TRXUSDT"  # used only to check open positions
 
-START siphon_level = 4.0  # siphoning starts once balance >= 4
+siphon_level = 4.0  # siphoning starts once balance >= 4
 CHECK_INTERVAL = 3600     # 1 hour in seconds
 
 session = HTTP(testnet=False, api_key=API_KEY, api_secret=API_SECRET)
