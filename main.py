@@ -1,161 +1,71 @@
-import logging
-import time
 import os
-import uuid#!/usr/bin/env python3
-import logging
 import time
-import os
-import math
-from datetime import datetime
 from pybit.unified_trading import HTTP
 
-# ---------------- CONFIG ----------------
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s"
-)
+# === CONFIG ===
+API_KEY = os.getenv("BYBIT_API_KEY")       # or replace with "your_key"
+API_SECRET = os.getenv("BYBIT_API_SECRET") # or replace with "your_secret"
 
-API_KEY = os.environ.get("BYBIT_API_KEY", "")
-API_SECRET = os.environ.get("BYBIT_API_SECRET", "")
-ACCOUNT_TYPE = "UNIFIED"
-SYMBOL = "TRXUSDT"  # used only to check open positions
+COIN = "USDT"
+FROM_ACCT = "6"  # UNIFIED trading
+TO_ACCT = "7"    # Funding
 
-siphon_level = 4.0  # siphoning starts once balance >= 4
-CHECK_INTERVAL = 3600     # 1 hour in seconds
+CHECK_INTERVAL = 3600  # check once every hour
 
+# === INIT SESSION ===
 session = HTTP(testnet=False, api_key=API_KEY, api_secret=API_SECRET)
 
-# Track last siphon baseline
-state_file = "siphon_state.txt"
+# === STATE VARIABLES ===
+siphon_start = 10.0  # start siphoning when balance >= $10
+current_threshold = siphon_start
 
-def load_siphon_level():
-    if not os.path.exists(state_file):
-        return siphon_level
-    try:
-        with open(state_file, "r") as f:
-            return float(f.read().strip())
-    except:
-        return siphon_level
-
-def save_siphon_level(level):
-    with open(state_file, "w") as f:
-        f.write(str(level))
-
-# ---------------- HELPERS ----------------
 def get_balance():
-    """Fetch unified account balance in USDT."""
-    out = session.get_wallet_balance(accountType=ACCOUNT_TYPE, coin="USDT")
-    try:
-        res = out["result"]["list"][0]["coin"]
-        for c in res:
-            if c.get("coin") == "USDT":
-                return float(c.get("walletBalance", 0))
-    except Exception as e:
-        logging.error("Error fetching balance: %s", e)
-    return 0.0
+    """Return current USDT balance on the trading account."""
+    resp = session.get_wallet_balance(accountType="UNIFIED", coin=COIN)
+    return float(resp["result"]["list"][0]["coin"][0]["walletBalance"])
 
-def has_open_positions(symbol):
-    """Check if there are open positions on the symbol."""
-    try:
-        out = session.get_positions(category="linear", symbol=symbol)
-        positions = out.get("result", {}).get("list", [])
-        for p in positions:
-            if float(p.get("size", 0)) > 0:
-                return True
-        return False
-    except Exception as e:
-        logging.error("Error checking positions: %s", e)
-        return False
+def has_open_trades():
+    """Check if there are any open positions on the trading account."""
+    resp = session.get_positions(category="linear", symbol="TRXUSDT")  # Replace symbol if needed
+    for pos in resp["result"]["list"]:
+        if float(pos["size"]) > 0:  # any open position
+            return True
+    return False
 
-def transfer_usdt(amount):
-    """Transfer USDT from Unified → Fund account."""
-    transfer_id = str(uuid.uuid4())  # Bybit requires UUID
+def siphon_amount(balance):
+    """Calculate 25% siphon amount from balance."""
+    return round(balance * 0.25, 6)
+
+def transfer_to_fund(amount):
+    """Execute internal transfer from trading to funding account."""
+    transfer_id = f"transfer_{int(time.time())}"
     try:
         resp = session.create_internal_transfer(
             transferId=transfer_id,
-            coin="USDT",
+            coin=COIN,
             amount=str(amount),
-            fromAccountType="UNIFIED",
-            toAccountType="FUND"
+            fromAccountType=FROM_ACCT,
+            toAccountType=TO_ACCT
         )
-        logging.info("Transfer %.2f USDT → Fund | Response: %s", amount, resp)
-        return True
+        print(f"Siphoned {amount} {COIN} to fund account. Response: {resp}")
     except Exception as e:
-        logging.error("Transfer failed")
-        logging.exception(e)
-        return False
+        print("Error during transfer:", e)
 
-# ---------------- MAIN LOGIC ----------------
-def siphon_loop():
-    siphon_level = load_siphon_level()
-    logging.info("Starting siphon bot | initial siphon level = %.2f", siphon_level)
+# === MAIN LOOP ===
+print("Starting hourly balance monitor with open-trade check...")
+while True:
+    try:
+        balance = get_balance()
+        open_trades = has_open_trades()
+        print(f"Current balance: {balance} USDT | Next threshold: {current_threshold} USDT | Open trades: {open_trades}")
 
-    while True:
-        try:
-            balance = get_balance()
-            logging.info("Current balance = %.2f USDT | siphon level = %.2f", balance, siphon_level)
-
-            if balance < siphon_level:
-                logging.info("Balance below siphon level, waiting...")
-            else:
-                if has_open_positions(SYMBOL):
-                    logging.info("Open positions detected, skipping siphon this hour")
-                else:
-                    siphon_amount = round(balance * 0.25)  # nearest whole number
-                    if siphon_amount > 0:
-                        success = transfer_usdt(siphon_amount)
-                        if success:
-                            siphon_level = balance  # reset baseline to current balance
-                            save_siphon_level(siphon_level)
-                            logging.info("Siphoned %.2f USDT. New siphon baseline = %.2f", siphon_amount, siphon_level)
-            logging.info("Next check in %d seconds (%s)", CHECK_INTERVAL, datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"))
-        except Exception as e:
-            logging.error("Error in siphon loop")
-            logging.exception(e)
+        if balance >= current_threshold and not open_trades:
+            amount_to_siphon = siphon_amount(balance)
+            transfer_to_fund(amount_to_siphon)
+            # Update threshold: double previous threshold
+            current_threshold *= 2
 
         time.sleep(CHECK_INTERVAL)
-
-# ---------------- ENTRY POINT ----------------
-if __name__ == "__main__":
-    siphon_loop()
-
-from pybit.unified_trading import HTTP
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s"
-)
-
-# Load API credentials from environment
-API_KEY = os.getenv("BYBIT_API_KEY")
-API_SECRET = os.getenv("BYBIT_API_SECRET")
-
-if not API_KEY or not API_SECRET:
-    raise ValueError("API key and secret must be set in environment variables!")
-
-session = HTTP(
-    testnet=False,  # True for testnet
-    api_key=API_KEY,
-    api_secret=API_SECRET
-)
-
-def transfer_usdt():
-    # Generate a proper UUID
-    transfer_id = str(uuid.uuid4())
-    logging.info("Generated transferId (UUID) = %s", transfer_id)
-    try:
-        resp = session.create_internal_transfer(
-            transferId=transfer_id,
-            coin="USDT",
-            amount="0.1",
-            fromAccountType="UNIFIED",
-            toAccountType="FUND"
-        )
-        logging.info("Transfer response: %s", resp)
     except Exception as e:
-        logging.error("Error during transfer")
-        logging.exception(e)
-
-if __name__ == "__main__":
-    transfer_usdt()
+        print("Error in main loop:", e)
+        time.sleep(CHECK_INTERVAL)
